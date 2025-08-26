@@ -1,0 +1,74 @@
+header {
+    a {
+        font-weight: 500;
+    }
+
+    svg {
+        height: 1.375rem;
+        width: auto;
+    }
+}
+
+main {
+    svg {
+        height: 3.75rem;
+        width: auto;
+        filter: drop-shadow(0 0 0.075rem var(--color-primary));
+    }
+}
+
+input {
+    padding: var(--space-m);
+    width: 100%;
+    background-color: var(--color-bg--translucent);
+    backdrop-filter: blur(20px);
+    color: var(--color-fg);
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 400;
+    border: var(--border);
+    border-radius: var(--border-radius);
+    transition: background-color 400ms, border-color 400ms;
+
+    &:focus {
+        border-color: var(--color-primary);
+        outline: none;
+        filter: contrast(0.975);
+    }
+
+    &.invalid {
+        border-color: var(--color-invalid) !important;
+    }
+}
+
+sfc-card {
+    strong {
+        text-transform: uppercase;
+    }
+
+    p {
+        font-size: 0.95em;
+    }
+}
+
+.grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+
+    & > *, &::after {
+        flex: 1 0 auto;
+        margin-bottom: var(--space-m);
+        width: calc(50% - (var(--space-m) / 2));
+    }
+
+    & > *:nth-child(even) {
+        margin-left: var(--space-m);
+    }
+
+    &:after {
+        content: "";
+        display: block;
+    }
+}

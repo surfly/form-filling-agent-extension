@@ -1,0 +1,57 @@
+:root {
+    --color-primary: #7B9AFF;
+    --color-secondary: #1F4CE0;
+    --color-bg: #FFFFFF;
+    --color-bg--translucent: #FFFFFFB0;
+    --color-bg--gray: #52525C;
+    --color-fg: #050824;
+    --color-fg--gray: #666672;
+    --color-border: #CACAD3;
+    --color-invalid: #C95454;
+
+    --space-s: 0.625rem;
+    --space-m: 1rem;
+    --space-l: 2rem;
+
+    --border: 1px solid var(--color-border);
+    --border-radius: 0.3rem;
+}
+
+
+.__wf-highlight {
+    background-color: #F9FF9F !important;
+    animation: highlight;
+    animation-iteration-count: 1;
+    animation-duration: 3s;
+}
+
+@keyframes highlight {
+    0%, 100% {
+        transform: scale(1.0);
+    }
+    25%, 75% {
+        transform: scale(1.3);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+
+#wf-ui {
+    position: fixed;
+    display: block;
+    margin: 3rem;
+    top: 0;
+    left: 0;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-size: 16px;
+    border-radius: var(--border-radius);
+    box-shadow: 0 0 0.5rem -0.125rem rgba(0, 0, 0, 0.2);
+    z-index: 1000000;
+}
+
+#wf-ui.hide {
+    display: none !important;
+}

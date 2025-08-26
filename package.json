@@ -1,0 +1,19 @@
+{
+  "private": true,
+  "name": "@surfly/ai-agent-extension",
+  "author": "Thassilo M. Schiepanski",
+  "type": "module",
+  "scripts": {
+    "render-content-ui": "node ./render-content-ui.js",
+    "bundle": "npm run render-content-ui && npx labs bundle",
+    "bundle:debug": "npm run bundle -- --debug",
+    "preview": "npm run render-content-ui && npx labs preview --debug"
+  },
+  "dependencies": {
+    "openai": "^5.7.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@surfly/labs": "github:surfly/labs"
+  }
+}

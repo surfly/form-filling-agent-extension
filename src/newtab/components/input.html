@@ -1,0 +1,134 @@
+<template>
+    <textarea maxlength="250"></textarea>
+</template>
+
+<script>
+    #currentPlaceholder;
+    #placeholderActive;
+
+    #PLACEHOLDERS = [];
+    #PLACEHOLDER_WAIT_OFFSET = 10;
+    #PLACEHOLDER_KEEP_OFFSET = 25;
+
+    #resetPlaceholder() {
+        this.#currentPlaceholder = [
+            ((this.#currentPlaceholder ?? [ -1 ])[0] + 1) % this.#PLACEHOLDERS.length,
+            -this.#PLACEHOLDER_WAIT_OFFSET
+        ];
+    }
+
+    #updatePlaceholder() {
+        if(!this.#placeholderActive) return;
+
+        this.#currentPlaceholder[1] += 1;
+
+        (
+            this.#currentPlaceholder[1]
+            >= this.#PLACEHOLDERS[this.#currentPlaceholder[0]].length + this.#PLACEHOLDER_KEEP_OFFSET
+        )
+            && this.#resetPlaceholder();
+
+        this.#DOM.querySelector("textarea")
+            .setAttribute("placeholder",
+                this.#PLACEHOLDERS[this.#currentPlaceholder[0]]
+                    .slice(0, Math.max(this.#currentPlaceholder[1], 0))
+            );
+
+        setTimeout(() => this.#updatePlaceholder(), Math.random() * 75 + 25);
+    }
+
+    #startPlaceholder() {
+        this.#placeholderActive = true;
+
+        this.#resetPlaceholder();
+        this.#updatePlaceholder();
+    }
+
+    #stopPlaceholder() {
+        this.#placeholderActive = false;
+    }
+
+    connectedCallback() {
+        setTimeout(() => {
+            this.#PLACEHOLDERS = Array.from(this.children)
+                .map(child => child
+                    .textContent
+                    .trim()
+                    .replace(/\n|\s{2,}/g, " "));
+
+            this.#startPlaceholder();
+
+            this.#DOM.querySelector("textarea")
+                .addEventListener("focus", e => {
+                    this.#stopPlaceholder();
+
+                    e.target.setAttribute("placeholder", "");
+                });
+            this.#DOM.querySelector("textarea")
+                .addEventListener("blur", e => {
+                    this.#startPlaceholder();
+                });
+            this.#DOM.querySelector("textarea")
+                .addEventListener("input", e => {
+                    this.validate();
+                });
+        }, 0);
+    }
+
+    invalidate() {
+        this.#DOM.querySelector("textarea")
+            .classList
+            .add("invalid");
+    }
+
+    validate() {
+        this.#DOM.querySelector("textarea")
+            .classList
+            .remove("invalid");
+    }
+
+    get value() {
+        return this.#DOM
+            .querySelector("textarea")
+            .value
+            .trim();
+    }
+
+    set value(value) {
+        return this.#DOM
+            .querySelector("textarea")
+            .value = value;
+    }
+</script>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    textarea {
+        resize: vertical;
+        padding: var(--space-m);
+        width: 100%;
+        min-height: calc(1.375rem * 5);
+        max-height: 50vh;
+        background-color: var(--color-bg--translucent);
+        backdrop-filter: blur(20px);
+        color: var(--color-fg);
+        font-family: inherit;
+        font-size: inherit;
+        font-weight: 400;
+        border: var(--border);
+        border-radius: var(--border-radius);
+        transition: background-color 400ms, border-color 400ms;
+    }
+    textarea:focus {
+        border-color: var(--color-primary);
+        outline: none;
+        filter: contrast(0.975);
+        box-shadow: 0 0 1rem -0.75rem var(--color-primary);
+    }
+    textarea.invalid {
+        border-color: var(--color-invalid) !important;
+    }
+</style>
