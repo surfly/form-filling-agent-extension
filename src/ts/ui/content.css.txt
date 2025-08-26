@@ -1,57 +1,73 @@
-:root {
-    --color-primary: #7B9AFF;
-    --color-secondary: #1F4CE0;
-    --color-bg: #FFFFFF;
-    --color-bg--translucent: #FFFFFFB0;
-    --color-bg--gray: #52525C;
-    --color-fg: #050824;
-    --color-fg--gray: #666672;
-    --color-border: #CACAD3;
-    --color-invalid: #C95454;
-
-    --space-s: 0.625rem;
-    --space-m: 1rem;
-    --space-l: 2rem;
-
-    --border: 1px solid var(--color-border);
-    --border-radius: 0.3rem;
-}
-
-
-.__wf-highlight {
-    background-color: #F9FF9F !important;
-    animation: highlight;
-    animation-iteration-count: 1;
-    animation-duration: 3s;
-}
-
-@keyframes highlight {
-    0%, 100% {
-        transform: scale(1.0);
-    }
-    25%, 75% {
-        transform: scale(1.3);
-    }
-    50% {
-        transform: scale(1.1);
-    }
-}
-
-
-#wf-ui {
+#__wf-ui {
     position: fixed;
-    display: block;
-    margin: 3rem;
-    top: 0;
-    left: 0;
-    background-color: var(--color-bg);
-    color: var(--color-fg);
-    font-size: 16px;
-    border-radius: var(--border-radius);
-    box-shadow: 0 0 0.5rem -0.125rem rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 4rem;
+    padding: 2rem 1.5rem;
+    bottom: 0;
+    right: 0;
+    width: 20rem;
+    min-height: 10rem;
+    background: #0b0b0b;
+    background: linear-gradient(45deg, #0b0b0b 0%, #0e1f4e 100%);
+    color: #ffffff;
+    border-radius: 0.5rem;
+    box-shadow: 0 0 0.75rem -0.125rem #2e5bd560;
     z-index: 1000000;
+    animation-name: bounce-in;
+    animation-duration: 4s;
+    animation-iteration-count: 1;
+    animation-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-#wf-ui.hide {
-    display: none !important;
+@keyframes bounce-in {
+    0%, 80% {
+        transform: scale(0);
+    }
+    90% {
+        transform: scale(1.5);
+        box-shadow: 0 0 1.75rem -0.125rem #2e5bd5A0;
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+#__wf-ui.highlight {
+    animation-name: bounce;
+    animation-duration: 1s;
+    animation-iteration-count: 1;
+    animation-timing-function: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes bounce {
+    0%, 100% {
+        transform: scale(1);
+    }
+    70% {
+        transform: scale(1.1);
+        box-shadow: 0 0 1.25rem -0.125rem #2e5bd580;
+    }
+}
+
+#__wf-ui.show {
+    display: flex !important;
+}
+
+#__wf-ui strong {
+    color: #d0d0d0 !important;
+    font-size: 20px !important;
+}
+
+#__wf-ui small {
+    font-size: 12px !important;
+    color: #d0d0d0 !important;
+}
+
+#__wf-ui p {
+    margin-top: 0.5rem;
+    font-size: 16px !important;
+    color: #ffffff !important;
 }

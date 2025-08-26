@@ -1,76 +1,45 @@
 import "./D2Snap.browser";
 
-import { log } from "../util";
+import { log, readEnv } from "../util";
 
 
-abstract class Snapshot<T> {
-    protected abstract create(): Promise<T>;
-
-    public async make(): Promise<T> {
-        log("Creating snapshot (serialising application state)...");
-
-        const snapshot: T = await this.create();
-
-        log(snapshot, "Snapshot completed");
-
-        return snapshot;
-    }
-}
-
-export type TSnapshot = Snapshot<unknown>;
-
-export type TSnapshotGUI = {
-    bitmap: ImageBitmap;
-    base64: string;
-};
-
-export class GUISnapshot extends Snapshot<TSnapshotGUI> {
-    protected async create() {
-        const canvasEl: HTMLCanvasElement = document.createElement("canvas");
-        const bitmap: ImageBitmap = await (browser.webfuseSession ?? browser.__virtualSession)
-            .takeScreenshot(false);
-
-        canvasEl.width = bitmap.width;
-        canvasEl.height = bitmap.height;
-
-        canvasEl
-            .getContext("2d")!
-            .drawImage(bitmap, 0, 0);
-
-        return {
-            bitmap,
-            base64: `data:image/jpeg;base64,${canvasEl.toDataURL("image/jpeg").split(";base64,")[1]}`
-        };
-    }
-}
-
-
-export type TSnapshotDOM = {
+export type TSnapshot = {
     serialization: string;
 };
 
-export class DOMSnapshot extends Snapshot<TSnapshotDOM> {
+export class DOMSnapshot {
     private readonly maxTokens: number;
 
-    constructor(maxTokens: number = 2**13) {
-        super();
-
+    constructor(maxTokens: number = 2**16) {
         this.maxTokens = maxTokens;
     }
 
     protected async create() {
+        const serialization = (await window.D2Snap
+            .d2Snap(
+                document.documentElement,
+                1,
+                0,
+                0,
+                {
+                    debug: readEnv("DEBUG_LOGS").boolean
+                }
+            ))
+                .serializedHtml
+                //.slice(0, this.maxTokens * 4);
+
         return {
-            serialization: (
-                await window.D2Snap
-                    .takeAdaptiveSnapshot(
-                        this.maxTokens,
-                        undefined,
-                        {
-                            assignUniqueIDs: true
-                        }
-                    )
-                )
-                    .serializedHtml
+            serialization 
         };
+    }
+
+    public async make(): Promise<TSnapshot> {
+        log("Creating snapshot (serialising application state)...");
+
+        const snapshot = await this.create();
+
+        log(snapshot, "Snapshot completed");
+
+        return snapshot;
     }
 }

@@ -1,1 +1,5 @@
-<strong>Let me think...</strong>
+<strong>Webfuse Assistent</strong>
+<small>DEMO</small>
+<p class="message">
+    Een momentje, ik ben deze pagina aan het analyseren...
+</p>

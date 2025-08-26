@@ -1,30 +1,17 @@
 import OpenAI from "openai";
 import { zodTextFormat } from "openai/helpers/zod";
-import { z, ZodType } from "zod";
+import { ZodType } from "zod";
 
 import { log } from "../util";
 import { TResponseSchema } from "./schema";
-import { TSnapshot, TSnapshotGUI, TSnapshotDOM } from "./Snapshot";
+import { TSnapshot } from "./Snapshot";
 
 
-abstract class ModelAdapter {
-    public abstract request<T>(
-        instructions: string | string[],
-        inputTask: string,
-        inputSnapshot?: TSnapshot,
-        responseSchema?: TResponseSchema
-    ): Promise<T | null>;
-}
-
-export type TAdapter = ModelAdapter;
-
-export class OpenAIAdapter extends ModelAdapter {
+export class OpenAIAdapter {
     private readonly model;
     private readonly endpoint;
 
     constructor(model, key) {
-        super();
-    
         this.model = model;
         this.endpoint = new OpenAI({
             apiKey: key
@@ -43,8 +30,7 @@ export class OpenAIAdapter extends ModelAdapter {
 
     public async request<T>(
         instructions: string | string[],
-        inputTask: string,
-        inputSnapshot?: TSnapshot,
+        inputSnapshot: TSnapshot,
         responseSchema?: TResponseSchema
     ) {
         instructions = [ instructions ].flat();
@@ -65,19 +51,8 @@ export class OpenAIAdapter extends ModelAdapter {
                 {
                     role: "user",
                     content: [
-                        { type: "input_text", text: [ "TASK:", inputTask ].join(" ") }
+                        { type: "input_text", text: (inputSnapshot as unknown as TSnapshot).serialization }
                     ]
-                        .concat(
-                            inputSnapshot
-                                ? [
-                                    Object.hasOwn(inputSnapshot, "bitmap")
-                                        ? { type: "input_image", file_id: await this.createFile(
-                                            (inputSnapshot as unknown as TSnapshotGUI).bitmap
-                                        ) }
-                                        : { type: "input_text", text: (inputSnapshot as unknown as TSnapshotDOM).serialization }
-                                    ]
-                                : []
-                        )
                 }
             ],
             ...responseSchema
@@ -85,7 +60,7 @@ export class OpenAIAdapter extends ModelAdapter {
                     text: {
                         format: zodTextFormat(
                             responseSchema as unknown as ZodType,
-                            "suggestions"
+                            "analysis"
                         )
                     }
                 }

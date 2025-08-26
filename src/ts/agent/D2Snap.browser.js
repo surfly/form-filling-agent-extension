@@ -1,4 +1,136 @@
 (() => {
+  // src/util.ts
+  function findDownsamplingRoot(dom) {
+    return dom.body ?? dom.documentElement ?? dom;
+  }
+  function resolveDocument(dom) {
+    let doc;
+    try {
+      let doc2 = (window ?? {}).document;
+      if (doc2) return doc2;
+    } catch {
+    }
+    doc = dom;
+    while (doc) {
+      if (!!doc["createTreeWalker"]) return doc;
+      doc = doc?.parentNode;
+    }
+    return null;
+  }
+  async function traverseDom(doc, root2, filter = NodeFilter.SHOW_ALL, cb) {
+    doc = resolveDocument(doc);
+    const walker = doc.createTreeWalker(root2, filter);
+    const nodes = [];
+    let node = walker.firstChild();
+    while (node) {
+      nodes.push(node);
+      node = walker.nextNode();
+    }
+    while (nodes.length) {
+      await cb(nodes.shift());
+    }
+  }
+  function formatHtml(html, indentSize = 2) {
+    const tokens = html.replace(/>\s+</g, "><").trim().split(/(<[^>]+>)/).filter((token) => token.trim().length);
+    const indentChar = " ".repeat(indentSize);
+    let indentLevel = 0;
+    const formattedHtml = [];
+    for (const token of tokens) {
+      if (token.match(/^<\/\w/)) {
+        indentLevel = Math.max(indentLevel - 1, 0);
+        formattedHtml.push(indentChar.repeat(indentLevel) + token);
+        continue;
+      }
+      if (token.match(/^<\w[^>]*[^\/]>$/)) {
+        formattedHtml.push(indentChar.repeat(indentLevel) + token);
+        indentLevel++;
+        continue;
+      }
+      if (token.match(/^<[^>]+\/>$/)) {
+        formattedHtml.push(indentChar.repeat(indentLevel) + token);
+        continue;
+      }
+      if (token.match(/^<[^!]/)) {
+        formattedHtml.push(indentChar.repeat(indentLevel) + token);
+        continue;
+      }
+      formattedHtml.push(indentChar.repeat(indentLevel) + token.trim());
+    }
+    return formattedHtml.join("\n").trim();
+  }
+
+  // src/TextRank.ts
+  function initArray(n, value = 0) {
+    return Array.from({ length: n }, () => value);
+  }
+  function initMatrix(n, m = n) {
+    return initArray(n).map(() => initArray(m));
+  }
+  function tokenizeSentences(text) {
+    return text.replace(/[^\w\s.?!:]+/g, "").split(/[.?!:]\s|\n|\r/g).map((rawSentence) => rawSentence.trim()).filter((sentence) => !!sentence);
+  }
+  function textRank(textOrSentences, k = 3, options = {}) {
+    const optionsWithDefaults = {
+      damping: 0.75,
+      maxIterations: 20,
+      ...options
+    };
+    const sentences = !Array.isArray(textOrSentences) ? tokenizeSentences(textOrSentences) : textOrSentences;
+    const sentenceTokens = sentences.map((sentence) => sentence.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter((token) => !!token.trim()));
+    const n = sentences.length;
+    const similarityMatrix = initMatrix(n);
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const vector1 = [];
+        const vector2 = [];
+        for (const token of new Set(sentenceTokens[i].concat(sentenceTokens[j]))) {
+          vector1.push(sentenceTokens[i].filter((w) => w === token).length);
+          vector2.push(sentenceTokens[j].filter((w) => w === token).length);
+        }
+        let dotProduct = 0;
+        let normA = 0;
+        let normB = 0;
+        for (let i2 = 0; i2 < vector1.length; i2++) {
+          dotProduct += vector1[i2] * vector2[i2];
+          normA += vector1[i2] * vector1[i2];
+          normB += vector2[i2] * vector2[i2];
+        }
+        similarityMatrix[i][j] = dotProduct / (normA ** 0.5 * normB ** 0.5 + 1e-10);
+      }
+    }
+    const scores = initArray(n, 1);
+    for (let iteration = 0; iteration < optionsWithDefaults.maxIterations; iteration++) {
+      for (let i = 0; i < n; i++) {
+        let sum = 0;
+        for (let j = 0; j < n; j++) {
+          if (i === j) continue;
+          let norm = 0;
+          for (let i2 = 0; i2 < similarityMatrix[j].length; i2++) {
+            norm += similarityMatrix[j][i2] * similarityMatrix[i2][i2];
+          }
+          sum += similarityMatrix[j][i] / (norm || 1) * scores[j];
+        }
+        scores[i] = optionsWithDefaults.damping * sum + (1 - optionsWithDefaults.damping);
+      }
+    }
+    return sentences.map((sentence, i) => {
+      return {
+        sentence,
+        index: i,
+        score: scores[i]
+      };
+    }).sort((a, b) => b.score - a.score).slice(0, Math.min(k, sentences.length)).sort((a, b) => a.index - b.index).map((obj) => obj.sentence).join(" ");
+  }
+  function relativeTextRank(text, ratio = 0.5, options = {}, noEmpty = false) {
+    const sentences = tokenizeSentences(text);
+    const k = Math.max(
+      Math.round(sentences.length * ratio),
+      1
+    );
+    return textRank(sentences, Math.max(k, +noEmpty), options);
+  }
+
   // node_modules/turndown/lib/turndown.browser.es.js
   function extend(destination) {
     for (var i = 1; i < arguments.length; i++) {
@@ -844,49 +976,21 @@
     ]);
   }
 
-  // src/util.ts
-  function findDownsamplingRoot(dom) {
-    return dom.body ?? dom.documentElement;
-  }
-  async function traverseDom(dom, root2, filter = NodeFilter.SHOW_ALL, cb) {
-    const walker = dom.createTreeWalker(root2, filter);
-    const nodes = [];
-    let node = walker.firstChild();
-    while (node) {
-      nodes.push(node);
-      node = walker.nextNode();
-    }
-    while (nodes.length) {
-      await cb(nodes.shift());
-    }
-  }
-  function formatHtml(html, indentSize = 2) {
-    const tokens = html.replace(/>\s+</g, "><").trim().split(/(<[^>]+>)/).filter((token) => token.trim().length);
-    const indentChar = " ".repeat(indentSize);
-    let indentLevel = 0;
-    const formattedHtml = [];
-    for (const token of tokens) {
-      if (token.match(/^<\/\w/)) {
-        indentLevel = Math.max(indentLevel - 1, 0);
-        formattedHtml.push(indentChar.repeat(indentLevel) + token);
-        continue;
-      }
-      if (token.match(/^<\w[^>]*[^\/]>$/)) {
-        formattedHtml.push(indentChar.repeat(indentLevel) + token);
-        indentLevel++;
-        continue;
-      }
-      if (token.match(/^<[^>]+\/>$/)) {
-        formattedHtml.push(indentChar.repeat(indentLevel) + token);
-        continue;
-      }
-      if (token.match(/^<[^!]/)) {
-        formattedHtml.push(indentChar.repeat(indentLevel) + token);
-        continue;
-      }
-      formattedHtml.push(indentChar.repeat(indentLevel) + token.trim());
-    }
-    return formattedHtml.join("\n").trim();
+  // src/Turndown.ts
+  var KEEP_TAG_NAMES = ["a"];
+  var SERVICE = new turndown_browser_es_default({
+    headingStyle: "atx",
+    bulletListMarker: "-",
+    codeBlockStyle: "fenced"
+  });
+  SERVICE.addRule("keep", {
+    filter: KEEP_TAG_NAMES,
+    replacement: (_, node) => node.outerHTML
+  });
+  SERVICE.use(gfm);
+  var KEEP_LINE_BREAK_MARK = "@@@";
+  function turndown(markup) {
+    return SERVICE.turndown(markup).trim().replace(/\n|$/g, KEEP_LINE_BREAK_MARK);
   }
 
   // src/config.json
@@ -923,9 +1027,6 @@
       },
       interactive: {
         tagNames: [
-          "a",
-          "button",
-          "details",
           "form",
           "input",
           "label",
@@ -1046,61 +1147,56 @@
         wrap: 0.2,
         hidden: 0.1,
         style: 0.1,
-        "data-*": 0.1,
         content: 0.1,
         "http-equiv": 0.1,
-        "data-uid": 1
+        "data-uid": 1,
+        "data-aie": 1
       }
     }
   };
 
   // src/D2Snap.ts
-  var TURNDOWN_KEEP_TAG_NAMES = ["A"];
-  var TURNDOWN_SERVICE = new turndown_browser_es_default({
-    headingStyle: "atx",
-    bulletListMarker: "-",
-    codeBlockStyle: "fenced"
-  });
-  TURNDOWN_SERVICE.keep(TURNDOWN_KEEP_TAG_NAMES);
-  TURNDOWN_SERVICE.use(gfm);
-  var KEEP_LINE_BREAK_MARK = "@@@";
+  var FILTER_TAG_NAMES = [
+    "SCRIPT",
+    "STYLE",
+    "LINK"
+  ];
+  function validateParam(param, allowInfinity = false) {
+    if (allowInfinity && param === Infinity) return;
+    if (param < 0 || param > 1)
+      throw new RangeError(`Invalid parameter ${param}, expects value in [0, 1]`);
+  }
   function isElementType(type, elementNode) {
     return rating_default.typeElement[type].tagNames.includes(elementNode.tagName.toLowerCase());
   }
-  async function takeSnapshot(dom, k = 2, l = 5, m = 0.5, options = {}) {
+  async function d2Snap(dom, k = 0.4, l = 0.5, m = 0.6, options = {}) {
+    validateParam(k, true);
+    validateParam(l);
+    validateParam(m);
     const optionsWithDefaults = {
       debug: false,
       assignUniqueIDs: false,
       ...options
     };
-    function snapTextNode(textNode, l2) {
-      if (textNode.nodeType !== 3 /* TEXT_NODE */) return;
-      textNode.textContent = textNode.textContent.trim().split(/\s+/).filter((_, i) => (i + 1) % l2).join(" ");
-    }
-    function snapAttributeNode(elementNode, m2) {
-      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
-      for (const attr of Array.from(elementNode.attributes)) {
-        if (rating_default.typeAttribute.semantics[attr.name] >= m2) continue;
-        elementNode.removeAttribute(attr.name);
+    function snapElementNode(elementNode) {
+      if (isElementType("container", elementNode)) return;
+      if (isElementType("content", elementNode)) {
+        return snapElementContentNode(elementNode);
       }
+      if (isElementType("interactive", elementNode)) {
+        snapElementInteractiveNode(elementNode);
+        return;
+      }
+      // elementNode.parentNode?.removeChild(elementNode);
     }
-    function snapElementContentNode(elementNode) {
+    function snapElementContainerNode(elementNode, k2, domTreeHeight2) {
       if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
-      if (!isElementType("content", elementNode)) return;
-      const markdown = TURNDOWN_SERVICE.turndown(elementNode.outerHTML);
-      const markdownNodesFragment = dom.createRange().createContextualFragment(
-        markdown.trim().replace(/\n|$/g, KEEP_LINE_BREAK_MARK)
+      if (isElementType("content", elementNode) || isElementType("interactive", elementNode)) return;
+      const mergeLevels = Math.max(
+        Math.round(domTreeHeight2 * Math.min(1, k2)),
+        1
       );
-      elementNode.replaceWith(...markdownNodesFragment.childNodes);
-    }
-    function snapElementInteractiveNode(elementNode) {
-      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
-      if (!isElementType("interactive", elementNode)) return;
-    }
-    function snapElementContainerNode(elementNode, k2) {
-      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
-      if (!isElementType("container", elementNode)) return;
-      if (elementNode.depth % k2 === 0) return;
+      if ((elementNode.depth - 1) % mergeLevels === 0) return;
       const getContainerSemantics = (tagName) => rating_default.typeElement.container.semantics[tagName.toLowerCase()];
       const elements = [
         elementNode.parentElement,
@@ -1140,33 +1236,42 @@
       }
       sourceEl.parentNode?.removeChild(sourceEl);
     }
-    function snapElementNode(elementNode) {
-      if (isElementType("container", elementNode)) {
-        elementNode.depth = (elementNode.parentNode.depth ?? -1) + 1;
-        return;
-      }
-      if (isElementType("content", elementNode)) {
-        return snapElementContentNode(elementNode);
-      }
-      if (isElementType("interactive", elementNode)) {
-        snapElementInteractiveNode(elementNode);
-        return;
-      }
-      elementNode.parentNode?.removeChild(elementNode);
+    function snapElementContentNode(elementNode) {
+      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
+      if (!isElementType("content", elementNode)) return;
+      const markdown = turndown(elementNode.outerHTML);
+      const markdownNodesFragment = resolveDocument(dom).createRange().createContextualFragment(markdown);
+      elementNode.replaceWith(...markdownNodesFragment.childNodes);
     }
-    const originalSize = dom.documentElement.outerHTML.length;
+    function snapElementInteractiveNode(elementNode) {
+      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
+      if (!isElementType("interactive", elementNode)) return;
+    }
+    function snapTextNode(textNode, l2) {
+      if (textNode.nodeType !== 3 /* TEXT_NODE */) return;
+      const text = textNode?.innerText ?? textNode.textContent;
+      textNode.textContent = relativeTextRank(text, 1 - l2, void 0, true);
+    }
+    function snapAttributeNode(elementNode, m2) {
+      if (elementNode.nodeType !== 1 /* ELEMENT_NODE */) return;
+      for (const attr of Array.from(elementNode.attributes)) {
+        if (rating_default.typeAttribute.semantics[attr.name] >= m2) continue;
+        elementNode.removeAttribute(attr.name);
+      }
+    }
+    const originalSize = (dom?.outerHTML ?? dom?.documentElement.outerHTML).length;
     const partialDom = findDownsamplingRoot(dom);
     let n = 0;
     optionsWithDefaults.assignUniqueIDs && await traverseDom(
       dom,
       partialDom,
       1 /* SHOW_ELEMENT */,
-      (node) => {
+      (elementNode) => {
         if (![
           ...rating_default.typeElement.container.tagNames,
           ...rating_default.typeElement.interactive.tagNames
-        ].includes(node.tagName.toLowerCase())) return;
-        node.setAttribute(config_default.uniqueIDAttribute, (n++).toString());
+        ].includes(elementNode.tagName.toLowerCase())) return;
+        elementNode.setAttribute(config_default.uniqueIDAttribute, (n++).toString());
       }
     );
     const virtualDom = partialDom.cloneNode(true);
@@ -1180,8 +1285,21 @@
       dom,
       virtualDom,
       1 /* SHOW_ELEMENT */,
-      (node) => snapAttributeNode(node, m)
-      // work on parent element
+      (elementNode) => {
+        if (!FILTER_TAG_NAMES.includes(elementNode.tagName.toUpperCase())) return;
+        elementNode.parentNode?.removeChild(elementNode);
+      }
+    );
+    let domTreeHeight = 0;
+    await traverseDom(
+      dom,
+      virtualDom,
+      1 /* SHOW_ELEMENT */,
+      (elementNode) => {
+        const depth = (elementNode.parentNode.depth ?? 0) + 1;
+        elementNode.depth = depth;
+        domTreeHeight = Math.max(depth, domTreeHeight);
+      }
     );
     await traverseDom(
       dom,
@@ -1201,13 +1319,20 @@
       1 /* SHOW_ELEMENT */,
       (node) => {
         if (!isElementType("container", node)) return;
-        return snapElementContainerNode(node, k);
+        return snapElementContainerNode(node, k, domTreeHeight);
       }
     );
-    const virtualDomRoot = k === Infinity && virtualDom.children.length ? virtualDom.children[0] : virtualDom;
-    const snapshot = virtualDomRoot.innerHTML;
+    await traverseDom(
+      dom,
+      virtualDom,
+      1 /* SHOW_ELEMENT */,
+      (node) => snapAttributeNode(node, m)
+      // work on parent element
+    );
+    const snapshot = virtualDom.innerHTML;
     let serializedHtml = optionsWithDefaults.debug ? formatHtml(snapshot) : snapshot;
     serializedHtml = serializedHtml.replace(new RegExp(KEEP_LINE_BREAK_MARK, "g"), "\n").replace(/\n *(\n|$)/g, "");
+    serializedHtml = k === Infinity && virtualDom.children.length ? serializedHtml.trim().replace(/^<[^>]+>\s*/, "").replace(/\s*<\/[^<]+>$/, "") : serializedHtml;
     return {
       serializedHtml,
       meta: {
@@ -1219,26 +1344,50 @@
       }
     };
   }
-  async function takeAdaptiveSnapshot(dom, maxTokens = 4096, maxIterations = 5, options = {}) {
+  async function adaptiveD2Snap(dom, maxTokens = 4096, maxIterations = 5, options = {}) {
     const S = findDownsamplingRoot(dom).outerHTML.length;
     const M = 1e6;
-    const computeParameters = (S2) => {
-      return {
-        k: Math.round(Math.E ** (2 / M * S2)),
-        l: Math.round(98 * Math.E ** (-(4 / M) * S2) + 2),
-        m: Math.E ** (-(4 / M) * S2)
+    function* generateHalton() {
+      const halton = (index, base) => {
+        let result = 0;
+        let f = 1 / base;
+        let i3 = index;
+        while (i3 > 0) {
+          result += f * (i3 % base);
+          i3 = Math.floor(i3 / base);
+          f /= base;
+        }
+        return result;
       };
-    };
+      let i2 = 0;
+      while (true) {
+        i2++;
+        yield [
+          halton(i2, 7),
+          halton(i2, 3),
+          halton(i2, 3)
+        ];
+      }
+    }
     let i = 0;
+    let sCalc = S;
     let parameters, snapshot;
-    do {
-      i++;
-      parameters = computeParameters(S * i ** 0.75);
-      snapshot = await takeSnapshot(dom, parameters.k, parameters.l, parameters.m, options);
-      i++;
-    } while (snapshot.estimatedTokens > maxTokens && i < maxIterations);
-    if (i === maxIterations)
-      throw new RangeError("Unable to create snapshot below given token threshold");
+    const haltonGenerator = generateHalton();
+    while (true) {
+      const haltonPoint = haltonGenerator.next().value;
+      const computeParam = (haltonValue) => Math.min(sCalc / M * haltonValue, 1);
+      parameters = {
+        k: computeParam(haltonPoint[0]),
+        l: computeParam(haltonPoint[1]),
+        m: computeParam(haltonPoint[2])
+      };
+      snapshot = await d2Snap(dom, parameters.k, parameters.l, parameters.m, options);
+      sCalc = sCalc ** 1.125;
+      if (snapshot.meta.estimatedTokens <= maxTokens)
+        break;
+      if (i++ === maxIterations)
+        throw new RangeError("Unable to create snapshot below given token threshold");
+    }
     return {
       ...snapshot,
       parameters: {
@@ -1250,10 +1399,10 @@
 
   // src/D2Snap.browser.ts
   window.D2Snap = {};
-  window.D2Snap.takeSnapshot = function(...args) {
-    return takeSnapshot(document, ...args);
+  window.D2Snap.d2Snap = function(...args) {
+    return d2Snap(document, ...args);
   };
-  window.D2Snap.takeAdaptiveSnapshot = function(...args) {
-    return takeAdaptiveSnapshot(document, ...args);
+  window.D2Snap.adaptiveD2Snap = function(...args) {
+    return adaptiveD2Snap(document, ...args);
   };
 })();

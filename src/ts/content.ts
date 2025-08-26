@@ -1,6 +1,5 @@
-import { TDriver, GUIDriver, DOMDriver } from "./agent/Driver";
-import { GUISnapshot, DOMSnapshot } from "./agent/Snapshot";
-import { log, readEnv, wait } from "./util";
+import { DOMSnapshot } from "./agent/Snapshot";
+import { log } from "./util";
 
 import CONTENT_CSS from "./ui/content.css.txt";
 import CONTENT_HTML from "./ui/content.html.txt";
@@ -9,10 +8,6 @@ import CONTENT_JS from "./ui/content.js.txt";
 
 const UI_ID = "__wf-ui";
 
-const GUI_DRIVER: TDriver = new GUIDriver();
-const DOM_DRIVER: TDriver = new DOMDriver();
-
-const GUI_SNAPSHOT: GUISnapshot = new GUISnapshot();
 const DOM_SNAPSHOT: DOMSnapshot = new DOMSnapshot();
 
 
@@ -45,49 +40,75 @@ const DOM_SNAPSHOT: DOMSnapshot = new DOMSnapshot();
         .appendChild(augmentedJsEl);
 
     log("Component UI injection completed.");
-
-    (localStorage.getItem("has_drive") === "1")
-        && propagateSnapshot();
-    localStorage.setItem("has_drive", "0");
 })();
 
 
-window.addEventListener("focus", () => {
-    browser.runtime
-        .sendMessage({
-            target: "popup",
-            cmd: "state",
-            data: {
-                state: "active"
-            }
+async function init() {
+    const walker = document.createTreeWalker(
+        document.body.querySelector("main") ?? document.body ?? document.documentElement,
+        NodeFilter.SHOW_ELEMENT,
+        {
+            acceptNode: node => {
+                return [
+                    "form",
+                    "input",
+                    "label",
+                    "select",
+                    "summary",
+                    "textarea"
+                ]
+                    .includes((node as HTMLElement).tagName.toLowerCase())
+                        ? NodeFilter.FILTER_ACCEPT
+                        : NodeFilter.FILTER_SKIP;
+            },
+        },
+    );
+    let latestID = 0;
+    let element = walker.firstChild();
+    while (element) {
+        const fieldID = (latestID++).toString();
+        const id = (element as HTMLElement)
+            .getAttribute("id");
+
+        (element as HTMLElement)
+            .setAttribute("data-field-id", fieldID);
+
+        element.addEventListener("focus", () => {
+            console.debug("Interactive input focused");
+
+            browser.runtime
+                .sendMessage({
+                    target: "background",
+                    cmd: "help-request",
+                    data: { fieldID, id }
+                });
         });
-});
 
-window.addEventListener("blur", () => {
-    browser.runtime
-        .sendMessage({
-            target: "popup",
-            cmd: "state",
-            data: {
-                state: "passive"
-            }
-        });
-});
+        element = walker.nextNode();
+    }
 
-
-async function propagateSnapshot() {
-    const snapshot = await (
-        !readEnv("DOM_SNAPSHOTS").boolean
-            ? GUI_SNAPSHOT
-            : DOM_SNAPSHOT
-    ).make();
+    const snapshot = await DOM_SNAPSHOT.make();
 
     browser.runtime
         .sendMessage({
             target: "background",
-            cmd: "iterate",
+            cmd: "analysis-request",
             data: { snapshot }
         });
+}
+
+document.addEventListener("DOMContentLoaded", () => setTimeout(init, 3000));
+
+
+function updateMessage(message) {
+    const ui = document.querySelector(`#${UI_ID}`);
+    if(!ui) return;
+
+    ui.classList.remove("highlight");
+    setTimeout(() => ui.classList.add("highlight"), 50);
+
+    ui.querySelector("p.message")!
+        .textContent = message;
 }
 
 
@@ -96,38 +117,20 @@ browser.runtime.onMessage
         if(message.target !== "content") return;
 
         switch(message.cmd) {
-            case "snapshot": {
-                document.querySelector(UI_ID)
-                    ?.classList
-                    .remove("hide");
-
-                await propagateSnapshot();
+            case "analysis-provision": {
+                updateMessage(`
+                    Hoi!
+                    Ik ben een virtuele assistent die klaar staat om u op deze pagina te helpen.
+                    Selecteer een formulierveld om mijn hulp te ontvangen.
+                `);
 
                 break;
             }
-            case "act": {
-                document.querySelector(UI_ID)
-                    ?.classList
-                    .add("hide");
-
-                const suggestedActuation = message.data.suggestedActuation.suggestions;
-                if(!suggestedActuation.length) {
-                    // TODO: Notify UI (e.g. window.think()), terminate?
-                    return;
-                }
-
-                localStorage.setItem("has_drive", "1");
-
-                await (
-                    !readEnv("DOM_SNAPSHOTS").boolean
-                        ? GUI_DRIVER
-                        : DOM_DRIVER
-                    )
-                        .run(suggestedActuation);
-
-                await wait(3000);   // TODO: Relocated or wait
-
-                await propagateSnapshot();
+            case "help-provision": {
+                updateMessage(
+                    message.data?.message
+                        || "Sorry, ik kan u hierbij niet helpen! Let op: dit is slechts een demoversie."
+                );
 
                 break;
             }
